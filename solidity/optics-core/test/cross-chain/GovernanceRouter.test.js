@@ -18,7 +18,7 @@ describe('GovernanceRouter', async () => {
   const governorDomain = 1000;
   const nonGovernorDomain = 2000;
   const thirdDomain = 3000;
-  const [thirdRouter] = provider.getWallets();
+  const [thirdRouter, recoveryManager] = provider.getWallets();
   let governorRouter,
     governorHome,
     governorReplicaOnNonGovernorChain,
@@ -42,7 +42,10 @@ describe('GovernanceRouter', async () => {
 
   beforeEach(async () => {
     // generate TestChainConfigs for the given domains
-    const configs = await domainsToTestConfigs(domains);
+    const configs = await domainsToTestConfigs(
+      domains,
+      recoveryManager.address,
+    );
 
     // deploy the entire Optics suite on each chain
     chainDetails = await deployMultipleChains(configs);

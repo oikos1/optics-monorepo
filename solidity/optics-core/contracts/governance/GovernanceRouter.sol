@@ -270,7 +270,7 @@ contract GovernanceRouter is Initializable, IMessageRecipient {
      * @param _xAppConnectionManager The address of the new xAppConnectionManager
      */
     function setXAppConnectionManager(address _xAppConnectionManager)
-        external
+        public
         onlyGovernorOrRecoveryManager
     {
         xAppConnectionManager = XAppConnectionManager(_xAppConnectionManager);
@@ -302,7 +302,7 @@ contract GovernanceRouter is Initializable, IMessageRecipient {
         emit ExitRecovery(recoveryManager);
     }
 
-    function inRecovery() public {
+    function inRecovery() public view returns (bool) {
         uint256 _recoveryActiveAt = recoveryActiveAt;
         bool _recoveryInitiated = _recoveryActiveAt != 0;
         bool _recoveryTimelockExpired = _recoveryActiveAt <= block.number;
