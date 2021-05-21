@@ -15,16 +15,16 @@ contract GovernanceRouter is Initializable, IMessageRecipient {
     using TypedMemView for bytes29;
     using GovernanceMessage for bytes29;
 
-    XAppConnectionManager public xAppConnectionManager;
-
     uint32 public immutable localDomain;
+    uint256 public immutable recoveryTimelock; // number of blocks before recovery can be activated
 
-    uint32 public governorDomain; // domain of Governor chain -- for accepting incoming messages from Governor
-    address public governor; // the local entity empowered to call governance functions, set to 0x0 on non-Governor chains
-
+    uint256 public recoveryActiveAt; // block number when recovery timelock expires; 0 if timelock has not been initiated
     address public recoveryManager; // the address of the recovery manager multisig
-    bool inRecoveryMode; // true if presently in "recovery mode," where the recoveryManager can call local contracts
-    // TODO add timelock state -- how long is the timelock? when was it initiated?
+
+    address public governor; // the local entity empowered to call governance functions, set to 0x0 on non-Governor chains
+    uint32 public governorDomain; // domain of Governor chain -- for accepting incoming messages from Governor
+
+    XAppConnectionManager public xAppConnectionManager;
 
     mapping(uint32 => bytes32) public routers; // registry of domain -> remote GovernanceRouter contract address
     uint32[] public domains; // array of all domains registered
@@ -47,12 +47,12 @@ contract GovernanceRouter is Initializable, IMessageRecipient {
         address indexed newRecoveryManager
     );
 
-    event InitiateRecoveryTimelock(uint32 recoveryEndTime);
-    event EnterRecoveryMode(address recoveryManager);
-    event ExitRecoveryMode(address recoveryManager);
+    event InitiateRecovery(address indexed recoveryManager, uint256 endBlock);
+    event ExitRecovery(address recoveryManager);
 
-    constructor(uint32 _localDomain) {
+    constructor(uint32 _localDomain, uint256 _recoveryTimelock) {
         localDomain = _localDomain;
+        recoveryTimelock = _recoveryTimelock;
     }
 
     function initialize(
@@ -100,18 +100,18 @@ contract GovernanceRouter is Initializable, IMessageRecipient {
         _;
     }
 
-    modifier onlyInRecoveryMode() {
-        require(inRecoveryMode, "! in recovery mode");
+    modifier onlyInRecovery() {
+        require(inRecovery(), "! in recovery");
         _;
     }
 
-    modifier onlyNotInRecoveryMode() {
-        require(!inRecoveryMode, "in recovery mode");
+    modifier onlyNotInRecovery() {
+        require(!inRecovery(), "in recovery");
         _;
     }
 
     modifier onlyGovernorOrRecoveryManager() {
-        if (inRecoveryMode) {
+        if (inRecovery()) {
             require(
                 msg.sender == recoveryManager,
                 "! called by recovery manager"
@@ -180,7 +180,7 @@ contract GovernanceRouter is Initializable, IMessageRecipient {
     function callRemote(
         uint32 _destination,
         GovernanceMessage.Call[] calldata _calls
-    ) external onlyGovernor onlyNotInRecoveryMode {
+    ) external onlyGovernor onlyNotInRecovery {
         bytes32 _router = _mustHaveRouter(_destination);
         bytes memory _msg = GovernanceMessage.formatCalls(_calls);
 
@@ -195,7 +195,7 @@ contract GovernanceRouter is Initializable, IMessageRecipient {
     function transferGovernor(uint32 _newDomain, address _newGovernor)
         external
         onlyGovernor
-        onlyNotInRecoveryMode
+        onlyNotInRecovery
     {
         bool _isLocalGovernor = _isLocalDomain(_newDomain);
 
@@ -239,7 +239,7 @@ contract GovernanceRouter is Initializable, IMessageRecipient {
     function setRouter(uint32 _domain, bytes32 _router)
         external
         onlyGovernor
-        onlyNotInRecoveryMode
+        onlyNotInRecovery
     {
         _setRouter(_domain, _router); // set the router locally
 
@@ -282,38 +282,31 @@ contract GovernanceRouter is Initializable, IMessageRecipient {
      */
     function initiateRecoveryTimelock()
         external
-        onlyNotInRecoveryMode
+        onlyNotInRecovery
         onlyRecoveryManager
     {
-        //TODO: set timelock state
+        require(recoveryActiveAt == 0, "timelock already initiated");
 
-        emit InitiateRecoveryTimelock(23); // TODO: real numbers on event
-    }
+        recoveryActiveAt = block.number + recoveryTimelock;
 
-    /**
-     * @notice Enter recovery mode
-     * @dev callable by anyone once the timelock has expired
-     */
-    function enterRecoveryMode() external onlyNotInRecoveryMode {
-        //TODO: require that timelock has expired
-
-        inRecoveryMode = true;
-        emit EnterRecoveryMode(recoveryManager);
+        emit InitiateRecovery(recoveryManager, recoveryActiveAt);
     }
 
     /**
      * @notice Exit recovery mode
      * @dev callable by the recovery manager to end recovery mode
      */
-    function exitRecoveryMode()
-        external
-        onlyInRecoveryMode
-        onlyRecoveryManager
-    {
-        //TODO: reset timelock state
+    function exitRecovery() external onlyInRecovery onlyRecoveryManager {
+        delete recoveryActiveAt;
 
-        inRecoveryMode = false;
-        emit ExitRecoveryMode(recoveryManager);
+        emit ExitRecovery(recoveryManager);
+    }
+
+    function inRecovery() public {
+        uint256 _recoveryActiveAt = recoveryActiveAt;
+        bool _recoveryInitiated = _recoveryActiveAt != 0;
+        bool _recoveryTimelockExpired = _recoveryActiveAt <= block.number;
+        return _recoveryInitiated && _recoveryTimelockExpired;
     }
 
     /**
