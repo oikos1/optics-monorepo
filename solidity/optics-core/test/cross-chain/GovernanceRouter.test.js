@@ -1,6 +1,7 @@
 const { ethers } = require('hardhat');
 const { provider } = waffle;
 const { expect } = require('chai');
+const testUtils = require('../utils');
 const { domainsToTestConfigs } = require('./generateTestChainConfigs');
 const { formatOpticsMessage } = require('./crossChainTestUtils');
 const {
@@ -18,7 +19,9 @@ describe('GovernanceRouter', async () => {
   const governorDomain = 1000;
   const nonGovernorDomain = 2000;
   const thirdDomain = 3000;
-  const [thirdRouter, recoveryManager] = provider.getWallets();
+  const walletProvider = new testUtils.WalletProvider(provider);
+  const [thirdRouter, recoveryManager] = walletProvider.getWalletsPersistent(2);
+
   let governorRouter,
     governorHome,
     governorReplicaOnNonGovernorChain,

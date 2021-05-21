@@ -33,6 +33,8 @@ describe('SimpleCrossChainMessage', async () => {
     latestUpdate = {};
 
   before(async () => {
+    [randomSigner, recoveryManager] = walletProvider.getWalletsPersistent(2);
+
     // generate TestChainConfigs for the given domains
     const configs = await domainsToTestConfigs(
       domains,
@@ -41,8 +43,6 @@ describe('SimpleCrossChainMessage', async () => {
 
     // deploy the entire Optics suite on each chain
     chainDetails = await deployMultipleChains(configs);
-
-    [randomSigner, recoveryManager] = walletProvider.getWalletsPersistent(2);
   });
 
   it('All Homes suggest empty update values when queue is empty', async () => {
